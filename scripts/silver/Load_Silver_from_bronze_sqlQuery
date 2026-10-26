@@ -1,0 +1,93 @@
+
+
+---================= CRM_CUST_INFO (Load-Silver) ==================
+
+INSERT INTO [silver].[crm_cust_info] (
+    [cst_id]
+    ,[cst_key]
+    ,[cst_firstname]
+    ,[cst_lastname]
+    ,[cst_marital_status]
+    ,[cst_gndr]
+    ,[cst_create_date]
+)
+  -- Avoid repeated values, unwasted spaces, reemplacing NULL by -1 and null date by 1900-01-01
+  SELECT *
+  FROM ( 
+      SELECT 
+        CASE 
+            WHEN [cst_id] IS NULL THEN -1
+            ELSE [cst_id]
+            END AS [cst_id]
+        ,[cst_key]
+        ,CASE 
+            WHEN [cst_firstname] IS NULL THEN 'N/A'
+            ELSE TRIM([cst_firstname])
+            END AS [cst_firstname]
+        ,CASE
+            WHEN [cst_lastname] IS NULL THEN 'N/A'
+            ELSE TRIM([cst_lastname])
+            END AS [cst_lastname]
+        ,CASE
+            WHEN [cst_marital_status] IS NULL OR ([cst_marital_status] != 'M' AND [cst_marital_status] != 'S') THEN 'N/A'
+            WHEN [cst_marital_status] = 'M' THEN 'Married'
+            WHEN [cst_marital_status] = 'S' THEN 'Single'
+            ELSE [cst_marital_status]
+            END AS [cst_marital_status]        
+        ,CASE
+            WHEN TRIM([cst_gndr]) IS NULL OR (TRIM([cst_gndr]) != 'M' AND TRIM([cst_gndr]) != 'F') THEN 'N/A'
+            WHEN TRIM([cst_gndr]) = 'M' THEN 'Male'
+            WHEN TRIM([cst_gndr]) = 'F' THEN 'Female'
+            ELSE TRIM([cst_gndr])
+            END AS [cst_gndr]            
+        ,CASE
+            WHEN [cst_create_date] IS NULL THEN 1900-01-01
+            ELSE [cst_create_date]
+            END AS [cst_create_date]
+      FROM (            
+            SELECT *
+                ,ROW_NUMBER() OVER (PARTITION BY [cst_id] ORDER BY [cst_create_date] DESC) AS flag_last  -- Avoid repeated values
+            FROM [DataWerehouse].[bronze].[crm_cust_info]
+            
+            ) Subquery0 WHERE flag_last = 1
+  
+      ) Subquery1
+
+
+
+
+
+
+---================= CRM_PRD_INFO (Load-Silver) ==================
+
+SELECT [prd_id]
+      ,[prd_key]
+      ,REPLACE(SUBSTRING([prd_key], 1, 5), '-', '_') AS cat_id -- Derived Colum from [prd_key] --------> (For can match this id with [bronze].[erp_px_cat_g1v2])
+      ,SUBSTRING([prd_key], 7, LEN([prd_key])) AS cat_id2 -- Derived Colum from [prd_key]      --------> (The Other part of [prd_key])
+      ,[prd_nm]
+      ,CASE 
+          WHEN [prd_cost] IS NULL THEN -1
+          ELSE [prd_cost]
+          END AS [prd_cost]
+      ,CASE UPPER(TRIM([prd_line]))
+          WHEN 'M' THEN 'Mountain'
+          WHEN 'R' THEN 'Road'
+          WHEN 'S' THEN 'Other Sales'
+          WHEN 'T' THEN 'Tourism'
+          ELSE 'n/a'
+          END AS [prd_line]
+      ,CASE 
+          WHEN [prd_start_dt] IS NULL THEN '1900-01-01'
+          ELSE [prd_start_dt]
+          END AS [prd_start_dt]
+      ,CASE 
+          WHEN [prd_end_dt] IS NULL THEN '1900-01-01'
+          ELSE [prd_end_dt]
+          END AS [prd_end_dt]
+  FROM [DataWerehouse].[bronze].[crm_prd_info]
+
+/*
+select *
+ FROM [DataWerehouse].[bronze].[crm_prd_info]
+ where prd_start_dt > prd_end_dt and prd_end_dt != '1900-01-01'
+ */
